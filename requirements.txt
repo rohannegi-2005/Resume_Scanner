@@ -3,6 +3,6 @@ gensim
 requests
 nltk
 fuzzywuzzy
-python-Levenshtein  
-pdfplumber          
-python-docx        
+python-Levenshtein
+pdfplumber
+python-docx
