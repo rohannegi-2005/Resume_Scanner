@@ -1,5 +1,5 @@
 streamlit
-gensim==4.2.0
+gensim==4.1.2
 requests
 nltk
 fuzzywuzzy
