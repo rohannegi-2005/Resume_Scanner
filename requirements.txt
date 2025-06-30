@@ -6,3 +6,4 @@ python-docx
 fuzzywuzzy
 python-Levenshtein
 nltk
+scipy==1.10.1
