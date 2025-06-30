@@ -1,8 +1,10 @@
 streamlit
-gensim
+gensim==4.3.0
 requests
 nltk
 fuzzywuzzy
 python-Levenshtein
 pdfplumber
 python-docx
+numpy
+pandas
