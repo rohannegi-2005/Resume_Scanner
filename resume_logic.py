@@ -153,15 +153,34 @@ def calculate_final_score(skill_score, exp_score, qual_score):
 # ----------------------------------------------------------------------------------------------------------
 
 
-from gensim.models import KeyedVectors
 import os
+import requests
+from gensim.models import KeyedVectors
 
-# Load pre-saved GloVe model in .kv format
+def download_model(url, dest_path):
+    if not os.path.exists(dest_path):
+        print(f"Downloading: {dest_path}")
+        r = requests.get(url, stream=True)
+        with open(dest_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"Downloaded: {dest_path}")
 
-model_path = os.path.join("glove_model", "glove_model.kv")
-word2vec = KeyedVectors.load(model_path, mmap='r')  # mmap='r' is optional but helps with memory efficiency
+# Model file paths
+os.makedirs('glove_model', exist_ok=True)
+MODEL_KV_PATH = 'glove_model/glove_model.kv'
+MODEL_NPY_PATH = 'glove_model/glove_model.kv.vectors.npy'
 
+# 🔗 URLs to both files (replace with your actual GitHub release links if different)
+KV_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
+NPY_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv.vectors.npy'
 
+# Download both files
+download_model(KV_URL, MODEL_KV_PATH)
+download_model(NPY_URL, MODEL_NPY_PATH)
+
+# Load model
+word2vec = KeyedVectors.load(MODEL_KV_PATH)
 
 import numpy as np
 
