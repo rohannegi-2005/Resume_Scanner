@@ -1,3 +1,29 @@
+import os
+import requests
+from gensim.models import KeyedVectors
+
+def download_model(url, dest_path):
+    if not os.path.exists(dest_path):
+        print("Downloading model file...")
+        r = requests.get(url, stream=True)
+        with open(dest_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print("Model download complete.")
+
+# ✅ Actual working download link
+MODEL_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
+MODEL_PATH = 'glove_model/glove_model.kv'
+
+# Create folder if not exists
+os.makedirs('glove_model', exist_ok=True)
+
+# Download model
+download_model(MODEL_URL, MODEL_PATH)
+
+# Load model
+model = KeyedVectors.load(MODEL_PATH)
+
 import streamlit as st
 import os
 import zipfile
