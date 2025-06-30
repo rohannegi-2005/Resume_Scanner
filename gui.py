@@ -1,31 +1,31 @@
-import os
-import requests
-from gensim.models import KeyedVectors
+# import os
+# import requests
+# from gensim.models import KeyedVectors
 
-def download_model(url, dest_path):
-    if not os.path.exists(dest_path):
-        print(f"Downloading: {dest_path}")
-        r = requests.get(url, stream=True)
-        with open(dest_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"Downloaded: {dest_path}")
+# def download_model(url, dest_path):
+#     if not os.path.exists(dest_path):
+#         print(f"Downloading: {dest_path}")
+#         r = requests.get(url, stream=True)
+#         with open(dest_path, 'wb') as f:
+#             for chunk in r.iter_content(chunk_size=8192):
+#                 f.write(chunk)
+#         print(f"Downloaded: {dest_path}")
 
-# Model file paths
-os.makedirs('glove_model', exist_ok=True)
-MODEL_KV_PATH = 'glove_model/glove_model.kv'
-MODEL_NPY_PATH = 'glove_model/glove_model.kv.vectors.npy'
+# # Model file paths
+# os.makedirs('glove_model', exist_ok=True)
+# MODEL_KV_PATH = 'glove_model/glove_model.kv'
+# MODEL_NPY_PATH = 'glove_model/glove_model.kv.vectors.npy'
 
-# 🔗 URLs to both files (replace with your actual GitHub release links if different)
-KV_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
-NPY_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv.vectors.npy'
+# # 🔗 URLs to both files (replace with your actual GitHub release links if different)
+# KV_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
+# NPY_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv.vectors.npy'
 
-# Download both files
-download_model(KV_URL, MODEL_KV_PATH)
-download_model(NPY_URL, MODEL_NPY_PATH)
+# # Download both files
+# download_model(KV_URL, MODEL_KV_PATH)
+# download_model(NPY_URL, MODEL_NPY_PATH)
 
-# Load model
-model = KeyedVectors.load(MODEL_KV_PATH)
+# # Load model
+# model = KeyedVectors.load(MODEL_KV_PATH)
 
 
 import streamlit as st
