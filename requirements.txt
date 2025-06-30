@@ -1,10 +1,8 @@
-streamlit
+streamlit==1.26.0
 gensim==4.2.0
-requests
-nltk
-fuzzywuzzy
-python-Levenshtein
+numpy==1.23.5
 pdfplumber
 python-docx
-numpy
-pandas
+fuzzywuzzy
+python-Levenshtein
+nltk
