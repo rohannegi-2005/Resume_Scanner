@@ -1,0 +1,8 @@
+streamlit
+gensim
+requests
+nltk
+fuzzywuzzy
+python-Levenshtein  
+pdfplumber          
+python-docx        
