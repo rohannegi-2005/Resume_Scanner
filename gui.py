@@ -4,25 +4,29 @@ from gensim.models import KeyedVectors
 
 def download_model(url, dest_path):
     if not os.path.exists(dest_path):
-        print("Downloading model file...")
+        print(f"Downloading: {dest_path}")
         r = requests.get(url, stream=True)
         with open(dest_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):
                 f.write(chunk)
-        print("Model download complete.")
+        print(f"Downloaded: {dest_path}")
 
-# ✅ Actual working download link
-MODEL_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
-MODEL_PATH = 'glove_model/glove_model.kv'
-
-# Create folder if not exists
+# Model file paths
 os.makedirs('glove_model', exist_ok=True)
+MODEL_KV_PATH = 'glove_model/glove_model.kv'
+MODEL_NPY_PATH = 'glove_model/glove_model.kv.vectors.npy'
 
-# Download model
-download_model(MODEL_URL, MODEL_PATH)
+# 🔗 URLs to both files (replace with your actual GitHub release links if different)
+KV_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
+NPY_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv.vectors.npy'
+
+# Download both files
+download_model(KV_URL, MODEL_KV_PATH)
+download_model(NPY_URL, MODEL_NPY_PATH)
 
 # Load model
-model = KeyedVectors.load(MODEL_PATH)
+model = KeyedVectors.load(MODEL_KV_PATH)
+
 
 import streamlit as st
 import os
