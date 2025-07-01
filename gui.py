@@ -45,7 +45,7 @@ from resume_logic import (
 # App title
 st.set_page_config(page_title="Resume Screening Tool", layout="wide")
 st.title("📄 AI Resume Screening Tool")
-st.markdown("Upload a folder (zip) with resumes, specify required skills and degrees, and get candidates with a score above 60%.")
+st.markdown("Upload Resumes (ZIP), Set Skills & Degrees, Get Matched Candidates")
 
 # Input for required skills and degrees
 required_skills = st.text_input("✏️ Required Skills (comma-separated)", value="")
