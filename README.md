@@ -1,52 +1,58 @@
-💼 AI-Enhanced Resume Screening & Selection System
-An HR-ready Resume Screening System that automates the process of shortlisting candidates from hundreds of resumes using modern Natural Language Processing (NLP), Regex, Fuzzy Matching, and Python automation.
-Designed with a clean, intuitive Streamlit UI to support real-world recruitment workflows.
+# 💼 AI-Enhanced Resume Screening & Selection System
 
-🚀 Key Features
-🔍 Intelligent Resume Filtering
-Match candidates against required skills using NLP & Fuzzy Matching.
+An HR-ready Resume Screening System that automates the process of shortlisting candidates from hundreds of resumes using modern **Natural Language Processing (NLP), Regex, Fuzzy Matching**, and Python automation.  
+Designed with a clean, intuitive **Streamlit UI** to support real-world recruitment workflows.
 
-📂 Bulk Resume Upload
-Supports uploading .zip files of .pdf resumes for batch processing.
+---
 
-🧠 Regex & NLP-Powered Parsing
-Automatically extracts key candidate details like Name, Email, Phone using the re module and NLP pipelines.
+## 🚀 Key Features
 
-✅ One-Click Shortlist Download
-Download all shortlisted resumes in .zip format for next-stage processing.
+### 🔍 Intelligent Resume Filtering
+- Match candidates against required skills using **NLP (Word2Vec)** and **cosine similarity** for accurate matching.
 
-📈 Excel Output for Final Review
-Generates an Excel sheet with structured data (Name, Email, Phone) from shortlisted resumes.
+### 📂 Bulk Resume Upload
+- Supports uploading `.zip` files of `.pdf` resumes for batch processing.
 
-⚙️ Scalable & Modular Architecture
-Built with extendability in mind — ready for integration with Firebase, databases, or AI modules.
+### 🧠 Regex & NLP-Powered Parsing
+- Automatically extracts key candidate details like Name, Email, Phone using the `re` module and NLP pipelines.
 
-🧬 Planned GenAI Integration
-Upcoming GPT-based enhancements for:
+### ✅ One-Click Shortlist Download
+- Download all shortlisted resumes in `.zip` format for next-stage processing.
 
-Resume summarization (strengths + red flags)
+### 📈 Excel Output for Final Review
+- Generates an Excel sheet with structured data (Name, Email, Phone) from shortlisted resumes.
 
-Cover letter generation
+### ⚙️ Scalable & Modular Architecture
+- Built with extendability in mind — ready for integration with Firebase, databases, or AI modules.
 
-Intelligent candidate ranking using OpenAI embeddings
+### 🧬 Planned GenAI Integration
+Upcoming GPT-based enhancements for:  
+- Resume summarization (strengths + red flags)  
+- Cover letter generation  
+- Intelligent candidate ranking using OpenAI embeddings
 
-💡 Real-World Impact
+---
+
+## 💡 Real-World Impact
 🎯 Inspired by actual hiring scenarios — this tool reduces hours of manual screening to a few minutes, boosting recruiter productivity and ensuring skill-based selection.
 
-“Instead of manually reading 300 resumes, our system shortlists candidates in seconds — saving time, reducing bias, and enabling smarter hiring.”
+*"Instead of manually reading 300 resumes, our system shortlists candidates in seconds — saving time, reducing bias, and enabling smarter hiring."*
 
-🛠️ Tech Stack
-Component	Tool/Library
-UI	Streamlit
-NLP & Regex	re, Word2Vec, FuzzyWuzzy
-Resume Parsing	PyPDF2 / pdfplumber
-Resume Matching	Word Embeddings (GloVe/Twitter100d)
-Output	.zip, .xlsx files
-Future AI	OpenAI API, GPT-4, LangChain
+---
 
-🙌 Acknowledgements
-Word Embeddings: GloVe-Twitter100d
+## 🛠️ Tech Stack
 
-Resume parsing ideas: Inspired by real HR scenarios
+| Component | Tool/Library |
+|-----------|--------------|
+| UI | Streamlit |
+| NLP & Resume Matching | Word2Vec (Twitter 200d), Cosine Similarity, FuzzyWuzzy |
+| Regex & Parsing | `re`, PyPDF2 / pdfplumber |
+| Output | `.zip`, `.xlsx` files |
+| Future AI | OpenAI API, GPT-4, LangChain |
 
-GPT API (coming soon): Powered by OpenAI
+---
+
+## 🙌 Acknowledgements
+- Word Embeddings: Word2Vec Twitter 200d  
+- Resume parsing ideas: Inspired by real HR scenarios  
+- GPT API (coming soon): Powered by OpenAI
