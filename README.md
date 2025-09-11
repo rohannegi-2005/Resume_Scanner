@@ -5,6 +5,10 @@ Designed with a clean, intuitive **Streamlit UI** to support real-world recruitm
 
 ---
 
+🔗 **Live Demo:** [Click Here](https://resumescanner-h4dxepxy8dyxs6txvgjazj.streamlit.app/)  
+
+---
+
 ## 🚀 Key Features
 
 ### 🔍 Intelligent Resume Filtering
