@@ -4,14 +4,18 @@ import zipfile
 import tempfile
 import glob
 from resume_logic import (
-    extract_text,
-    match_skills,
     extract_experience,
     match_qualification,
-    calculate_final_score,
-    word2vec,
+    calculate_final_score   
 )
 
+from text_extractor import TextExtractor
+from semantic_matching import SemanticMatcher
+from text_vectorizer import TextVectorizer
+
+text_extractor = TextExtractor()
+semantic_matcher = SemanticMatcher()
+text_vectorizer = TextVectorizer()
 # App title
 st.set_page_config(page_title="Resume Screening Tool", layout="wide")
 st.title("📄 AI Resume Screening Tool")
@@ -50,9 +54,18 @@ if uploaded_file and required_skills and required_degrees:
         for i, file_path in enumerate(resume_files, 1):
             filename = os.path.basename(file_path)
             try:
-                text = extract_text(file_path)
-                matched_skills, skill_score = match_skills(text, required_skills.split(","), word2vec)
-                skill_score = (skill_score / len(required_skills.split(","))) * 100
+                text = text_extractor.extract_text(file_path)
+                tokens = text_extractor.get_tokens(text)
+                bigram_phrases = text_extractor.get_phrases(tokens, 2)
+                trigram_phrases = text_extractor.get_phrases(tokens, 3)
+                phrases = bigram_phrases + trigram_phrases
+                phrase_vectors = text_vectorizer.word_to_vec(phrases)
+                skill_vectors = text_vectorizer.word_to_vec(required_skills)  # Precompute vectors if needed
+                matched_skills, skill_score = semantic_matcher.check_match(
+                    skill_vectors,
+                    phrase_vectors,
+                    threshold=0.85
+                )
 
                 exp_score = extract_experience(text)
                 qual_score = match_qualification(text, required_degrees.split(","))
@@ -60,6 +73,7 @@ if uploaded_file and required_skills and required_degrees:
 
                 if final_score >= 60:
                     selected_resumes.append((filename, round(final_score, 2), matched_skills))
+                    
             except Exception as e:
                 st.warning(f"❌ Could not process {filename}: {e}")
 
