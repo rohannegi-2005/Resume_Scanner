@@ -13,24 +13,24 @@ from fuzzywuzzy import fuzz
 
 # ========== CONFIG ==========
 RESUME_FOLDER = "resumes"
-# REQUIRED_SKILLS = ["game engine", "3D Modeling Basics", "c#","animation systems", "unity","ai","c++","java"]
-# REQUIRED_DEGREES = ["B.tech","Engineering","Diploma"]
+REQUIRED_SKILLS = ["game engine", "3D Modeling Basics", "c#","animation systems", "unity","ai","c++","java"]
+REQUIRED_DEGREES = ["B.tech","Engineering","Diploma"]
 
 
 
 # # Function To Extract Text From PDF or DOCX
 
-def extract_text(file_path):
-    if file_path.endswith(".pdf"):
-        text = ""
-        with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() + "\n"
-        return text
-    elif file_path.endswith(".docx"):
-        doc = docx.Document(file_path)
-        return "\n".join([para.text for para in doc.paragraphs])
-    return ""
+# def extract_text(file_path):
+#     if file_path.endswith(".pdf"):
+#         text = ""
+#         with pdfplumber.open(file_path) as pdf:
+#             for page in pdf.pages:
+#                 text += page.extract_text() + "\n"
+#         return text
+#     elif file_path.endswith(".docx"):
+#         doc = docx.Document(file_path)
+#         return "\n".join([para.text for para in doc.paragraphs])
+#     return ""
 
 
 
@@ -153,129 +153,136 @@ def calculate_final_score(skill_score, exp_score, qual_score):
 # ----------------------------------------------------------------------------------------------------------
 
 
-import os
-import requests
-from gensim.models import KeyedVectors
+# import os
+# import requests
+# from gensim.models import KeyedVectors
 
-def download_model(url, dest_path):
-    if not os.path.exists(dest_path):
-        print(f"Downloading: {dest_path}")
-        r = requests.get(url, stream=True)
-        with open(dest_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"Downloaded: {dest_path}")
+# def download_model(url, dest_path):
+#     if not os.path.exists(dest_path):
+#         print(f"Downloading: {dest_path}")
+#         r = requests.get(url, stream=True)
+#         with open(dest_path, 'wb') as f:
+#             for chunk in r.iter_content(chunk_size=8192):
+#                 f.write(chunk)
+#         print(f"Downloaded: {dest_path}")
 
-# Model file paths
-os.makedirs('glove_model', exist_ok=True)
-MODEL_KV_PATH = 'glove_model/glove_model.kv'
-MODEL_NPY_PATH = 'glove_model/glove_model.kv.vectors.npy'
+# # Model file paths
+# os.makedirs('glove_model', exist_ok=True)
+# MODEL_KV_PATH = 'glove_model/glove_model.kv'
+# MODEL_NPY_PATH = 'glove_model/glove_model.kv.vectors.npy'
 
-# 🔗 URLs to both files (replace with your actual GitHub release links if different)
-KV_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
-NPY_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv.vectors.npy'
+# # 🔗 URLs to both files (replace with your actual GitHub release links if different)
+# KV_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv'
+# NPY_URL = 'https://github.com/rohannegi-2005/Resume_Scanner/releases/download/version_1/glove_model.kv.vectors.npy'
 
-# Download both files
-download_model(KV_URL, MODEL_KV_PATH)
-download_model(NPY_URL, MODEL_NPY_PATH)
+# # Download both files
+# download_model(KV_URL, MODEL_KV_PATH)
+# download_model(NPY_URL, MODEL_NPY_PATH)
 
-# Load model
-word2vec = KeyedVectors.load(MODEL_KV_PATH)
+# # Load model
+# word2vec = KeyedVectors.load(MODEL_KV_PATH)
 
-import numpy as np
+# import numpy as np
 
-def get_average_vector(text, model):
-    words = text.lower().split()
-    valid_vectors = []
+# def get_average_vector(text, model):
+#     words = text.lower().split()
+#     valid_vectors = []
 
-    for word in words:
-        if word in model:
-            valid_vectors.append(model[word])
+#     for word in words:
+#         if word in model:
+#             valid_vectors.append(model[word])
 
-    if valid_vectors:
-        return np.mean(valid_vectors, axis=0)
-    else:
-        return None
+#     if valid_vectors:
+#         return np.mean(valid_vectors, axis=0)
+#     else:
+#         return None
 
-# Cosine Similarirty
+# # Cosine Similarirty
 
-from numpy import dot
-from numpy.linalg import norm
-def cosine_similarity(vec1, vec2):
-    return dot(vec1, vec2) / (norm(vec1) * norm(vec2))
-
-
+# from numpy import dot
+# from numpy.linalg import norm
+# def cosine_similarity(vec1, vec2):
+#     return dot(vec1, vec2) / (norm(vec1) * norm(vec2))
 
 
-from nltk import ngrams
-def generate_phrases(tokens, n=2):
-    return [' '.join(gram) for gram in ngrams(tokens, n)]
 
-#  Skill Matching Using Word2Vec and Fuzzzywords
 
-def match_skill_with_resume(required_skill, resume_text, model, threshold=0.85, fuzzy_threshold=85):
-    tokens = resume_text.lower().split()
+# from nltk import ngrams
+# def generate_phrases(tokens, n=2):
+#     return [' '.join(gram) for gram in ngrams(tokens, n)]
+
+# #  Skill Matching Using Word2Vec and Fuzzzywords
+
+# def match_skill_with_resume(required_skill, resume_text, model, threshold=0.85, fuzzy_threshold=85):
+#     tokens = resume_text.lower().split()
     
-    # Create phrases
-    bigrams = generate_phrases(tokens, 2)
-    trigrams = generate_phrases(tokens, 3)
-    phrases = bigrams + trigrams
+#     # Create phrases
+#     bigrams = generate_phrases(tokens, 2)
+#     trigrams = generate_phrases(tokens, 3)
+#     phrases = bigrams + trigrams
 
-    skill_vector = get_average_vector(required_skill, model)
+#     skill_vector = get_average_vector(required_skill, model)
     
-    top_score = 0
-    matched = False
+#     top_score = 0
+#     matched = False
 
-    if skill_vector is not None:
-        for phrase in phrases:
-            phrase_vector = get_average_vector(phrase, model)
-            if phrase_vector is not None:
-                similarity = cosine_similarity(skill_vector, phrase_vector)
-                if similarity > threshold:
-                    matched = True
-                    top_score = max(top_score, similarity)
+#     if skill_vector is not None:
+#         for phrase in phrases:
+#             phrase_vector = get_average_vector(phrase, model)
+#             if phrase_vector is not None:
+#                 similarity = cosine_similarity(skill_vector, phrase_vector)
+#                 if similarity > threshold:
+#                     matched = True
+#                     top_score = max(top_score, similarity)
 
-        if matched:
-            return True, top_score
+#         if matched:
+#             return True, top_score
 
-    # 🔁 Fuzzy fallback if not matched via vectors
-    for phrase in phrases:
-        fuzzy_score = fuzz.partial_ratio(required_skill.lower(), phrase.lower())
-        if fuzzy_score >= fuzzy_threshold:
-            return True, fuzzy_score / 100  # normalize to 0–1
+#     # 🔁 Fuzzy fallback if not matched via vectors
+#     for phrase in phrases:
+#         fuzzy_score = fuzz.partial_ratio(required_skill.lower(), phrase.lower())
+#         if fuzzy_score >= fuzzy_threshold:
+#             return True, fuzzy_score / 100  # normalize to 0–1
 
-    return False, 0
+#     return False, 0
 
 
-def match_skills(full_text, required_skills, model, threshold=0.85):
-    matched_skills = []
+# def match_skills(full_text, required_skills, model, threshold=0.85):
+#     matched_skills = []
     
-    skill_score = 0
+#     skill_score = 0
  
-    for skill in required_skills:
-        matched, similarity_score = match_skill_with_resume(skill, full_text, model, threshold)
-        if matched:
-            matched_skills.append((skill, similarity_score))
-            skill_score += 1
+#     for skill in required_skills:
+#         matched, similarity_score = match_skill_with_resume(skill, full_text, model, threshold)
+#         if matched:
+#             matched_skills.append((skill, similarity_score))
+#             skill_score += 1
 
-    return matched_skills, skill_score
+#     return matched_skills, skill_score
         
 
 
 
 
                                # TESTING
+# from text_extractor import TextExtractor
+# from semantic_matching import SemanticMatcher
+# from text_similarity_engine import TextSimilarityEngine
 
+# text_extractor = TextExtractor()
+# semantic_matcher = SemanticMatcher()
 # for filename in os.listdir(RESUME_FOLDER):
 #     file_path = os.path.join(RESUME_FOLDER, filename)
 #     if not filename.endswith((".pdf", ".docx")):
 #         continue
 
 #     print(f"\n📄 Analyzing Resume: {filename}")
-#     text = extract_text(file_path)
-    
-
-#     matched_skills, skill_score = match_skills(text, REQUIRED_SKILLS, word2vec)
+#     text = text_extractor.extract_text(file_path)
+#     tokens = text_extractor.get_tokens(text)
+#     bigram_phrases = text_extractor.get_phrases(tokens, 2)
+#     trigram_phrases = text_extractor.get_phrases(tokens, 3)
+#     phrases = bigram_phrases + trigram_phrases
+#     matched_skills, skill_score = semantic_matcher.check_match(REQUIRED_SKILLS, phrases, threshold = 0.85)
 #     total_required_skills = len(REQUIRED_SKILLS)
 #     skill_score = (skill_score / total_required_skills) * 100
 
