@@ -8,13 +8,13 @@ class TextSimilarityEngine:
             model_name=model_name
         )
 
-    def __embed(self, text: str):
+    def _embed(self, text: str):
         """
         Convert text to vector
         """
         return self.embeddings.embed_query(text)
 
-    def __cosine_similarity(self, vec1, vec2):
+    def _cosine_similarity(self, vec1, vec2):
         """
         Compute cosine similarity between two vectors
         """
@@ -31,6 +31,6 @@ class TextSimilarityEngine:
         """
         High-level API: text → similarity score
         """
-        vec1 = self.__embed(text1)
-        vec2 = self.__embed(text2)
-        return self.__cosine_similarity(vec1, vec2)
+        vec1 = self._embed(text1)
+        vec2 = self._embed(text2)
+        return self._cosine_similarity(vec1, vec2)
