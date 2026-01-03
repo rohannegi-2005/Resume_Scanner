@@ -1,0 +1,32 @@
+# --- Python & Virtual Environments ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# --- Model Files (Too large for Git) ---
+# Ignore the entire model folder
+glove_model/
+
+# OR specific large files if you want to keep the folder structure:
+# *.kv
+# *.npy
+# *.txt
+
+# --- Resume Data (Privacy) ---
+# Don't upload user data or extracted zips
+resumes/
+temp/
+*.zip
+*.pdf
+*.docx
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+
+# --- IDE Settings ---
+.vscode/
+.idea/
+*.swp

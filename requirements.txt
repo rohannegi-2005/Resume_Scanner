@@ -1,9 +1,8 @@
-streamlit==1.26.0
-gensim==4.2.0
-numpy==1.23.5
+streamlit
+gensim
+numpy<2.0
 pdfplumber
 python-docx
 fuzzywuzzy
-python-Levenshtein
 nltk
-scipy==1.10.1
+python-dateutil
