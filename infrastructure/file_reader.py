@@ -1,23 +1,41 @@
+import os
 import pdfplumber
-import docx
+from docx import Document
+
 
 class FileReader:
-    @staticmethod
-    def extract_text(file_path):
+    SUPPORTED = {".pdf", ".docx"}
+
+    def read(self, file_path: str) -> str:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".pdf":
+            return self._read_pdf(file_path)
+        elif ext == ".docx":
+            return self._read_docx(file_path)
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    def _read_pdf(self, path: str) -> str:
+        text = ""
         try:
-            if file_path.endswith(".pdf"):
-                text = ""
-                with pdfplumber.open(file_path) as pdf:
-                    for page in pdf.pages:
-                        extracted = page.extract_text()
-                        if extracted: text += extracted + "\n"
-                return text
-            
-            elif file_path.endswith(".docx"):
-                doc = docx.Document(file_path)
-                return "\n".join([para.text for para in doc.paragraphs])
-            
-            return ""
+            with pdfplumber.open(path) as pdf:
+                for page in pdf.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += extracted + "\n"
         except Exception as e:
-            print(f"Error reading {file_path}: {e}")
-            return ""
+            raise RuntimeError(f"PDF read error: {e}")
+        return text.strip()
+
+    def _read_docx(self, path: str) -> str:
+        try:
+            doc = Document(path)
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            # Also extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            paragraphs.append(cell.text.strip())
+            return "\n".join(paragraphs).strip()
+        except Exception as e:
+            raise RuntimeError(f"DOCX read error: {e}")

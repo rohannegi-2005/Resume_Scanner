@@ -1,33 +1,36 @@
-import os
+"""
+MLEngine: Replaces the GloVe .kv file approach with sentence-transformers.
+- Model: all-MiniLM-L6-v2 (~80 MB, auto-downloads on first run)
+- Much better semantic accuracy than GloVe Twitter 200d
+- Works on Streamlit Cloud (CPU-only, fits within free tier limits)
+- Cached globally so it loads only once per deployment
+"""
 import numpy as np
-from gensim.models import KeyedVectors
-from numpy import dot
-from numpy.linalg import norm
-import streamlit as st  # Used only for caching
+from sentence_transformers import SentenceTransformer, util
+
 
 class MLEngine:
-    def __init__(self, model_path):
-        self.model_path = model_path
-        self.model = self._load_model()
+    MODEL_NAME = "all-MiniLM-L6-v2"
 
-    @st.cache_resource
-    def _load_model(_self):
-        # The underscore _self tells streamlit not to hash the class instance
-        print("⏳ Loading Word2Vec Model... this may take a moment.")
-        if not os.path.exists(_self.model_path):
-            raise FileNotFoundError(f"Model file not found at {_self.model_path}")
-        return KeyedVectors.load(_self.model_path, mmap='r')
+    def __init__(self):
+        # Model is loaded via the cached loader in app.py
+        # This allows @st.cache_resource to work correctly
+        self.model: SentenceTransformer = None
 
-    def get_vector(self, text):
-        """Returns the average vector for a phrase."""
-        words = text.lower().split()
-        valid_vectors = [self.model[word] for word in words if word in self.model]
-        
-        if valid_vectors:
-            return np.mean(valid_vectors, axis=0)
-        return None
+    def set_model(self, model: SentenceTransformer):
+        self.model = model
 
-    def cosine_similarity(self, vec1, vec2):
-        if vec1 is None or vec2 is None:
-            return 0
-        return dot(vec1, vec2) / (norm(vec1) * norm(vec2))
+    def encode(self, texts: list):
+        """Encode a list of strings into embeddings (tensor)."""
+        if isinstance(texts, str):
+            texts = [texts]
+        return self.model.encode(texts, convert_to_tensor=True, show_progress_bar=False)
+
+    def batch_similarity(self, query_emb, corpus_embs) -> np.ndarray:
+        """Return cosine similarity scores between one query and a corpus."""
+        sims = util.cos_sim(query_emb, corpus_embs)[0]
+        return sims.cpu().numpy()
+
+    def pairwise_similarity(self, emb1, emb2) -> float:
+        """Cosine similarity between two single embeddings."""
+        return float(util.cos_sim(emb1, emb2).item())

@@ -1,21 +1,19 @@
-class Candidate:
-    def __init__(self, filename, text):
-        self.filename = filename
-        self.text = text
-        self.matched_skills = []  # List of (skill, score)
-        self.skill_score = 0.0
-        self.experience_score = 0.0
-        self.qualification_score = 0.0
-        self.final_score = 0.0
+from dataclasses import dataclass, field
+from typing import List, Tuple
 
-    def calculate_final_score(self, total_req_skills):
-        # Normalize skill score (percentage of skills matched)
-        normalized_skill_score = (self.skill_score / total_req_skills) * 100 if total_req_skills > 0 else 0
-        
-        # Weighted Formula: 60% Skills + 30% Exp + 10% Qual
-        self.final_score = (
-            (normalized_skill_score * 0.6) + 
-            (self.experience_score * 0.3) + 
-            (self.qualification_score * 0.1)
-        )
-        return self.final_score
+
+@dataclass
+class Candidate:
+    filename: str = ""
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    final_score: float = 0.0
+    skill_score: int = 0
+    experience_score: float = 0.0
+    qualification_score: float = 0.0
+    matched_skills: List[Tuple[str, float]] = field(default_factory=list)
+    unmatched_skills: List[str] = field(default_factory=list)
+    years_experience: float = 0.0
+    highest_degree: str = "Unknown"
+    file_path: str = ""
