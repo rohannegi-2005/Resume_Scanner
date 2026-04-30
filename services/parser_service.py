@@ -1,29 +1,37 @@
 """
-ParserService v3 — Production-grade, SaaS-level accuracy
+ParserService v4 — Template-aware SaaS-grade parser
 
-Root-cause fixes from v2:
-  ❌ BUG 1: _WORK_HDR used re.compile without re.MULTILINE
-             → _WORK_HDR.search(full_text) only matched if resume STARTED
-               with "Experience", which never happens
-             → has_work_hdr was always False
-             → fallback mode fired on ALL resumes
-             → committee/project dates leaked into experience calculation
-  ✅ FIX 1: Added re.MULTILINE so ^ matches each line start in full text
+Template family detected (UPES/similar format):
+  Line 0:  Full Name
+  Line 1:  email | phone | linkedin | github
+  Sections: Professional Summary → Education → Technical Skills →
+            Experience/Internships → Projects →
+            Certifications & Achievements → Positions of Responsibility
+  Experience format: Company DateRange\n  Role: X | Duration: Y Years [Z Months]
 
-  ❌ BUG 2: Degree detection used `kw in text_lower` (substring check)
-             → "b.com" matched "github.com/rohannegi-2005"
-             → All candidates with github link got B.Com degree
-  ✅ FIX 2: Regex word-boundary check: (?<![a-z])kw(?![a-z])
+v4 fixes over v3:
+  ❌ BUG 1: Duration field ("Duration: 2 Years") completely ignored
+            → entire template family's explicit exp field thrown away
+  ✅ FIX 1: _DURATION_RE parses "Duration: X Years [Y Months]" as Priority 1
+            date ranges become fallback only
 
-  ❌ BUG 3: "bba" mapped to B.Com category
-  ✅ FIX 3: BBA is its own degree with correct label
+  ❌ BUG 2: "Certifications & Achievements" not a stop header
+            → cert section dates (GDC 2024, EthIndia 2023) leaked into work
+  ✅ FIX 2: pattern now covers both "& Achievements" and "& Accomplishments"
 
-  ❌ BUG 4: "Internship:", "Volunteer:", "Position of Responsibility" not
-             in _WORK_HDR → resumes with "Internship:" only got fallback mode
-  ✅ FIX 4: Added internship/volunteer to WORK_HDR and OTHER_HDR
+  ❌ BUG 3: "Positions of Responsibility" absent from stop headers
+  ✅ FIX 3: added to _STOP_HDR_FULL_RE
 
-  ❌ BUG 5: JD extractor returned full sentences as "skills"
-  ✅ FIX 5: Two-pass approach — known tech regex + short-phrase filter
+  ❌ BUG 4: CGPA not in edu-context filter
+            → "IIT Kharagpur | CGPA: 8.78/10 Jul 2016–May 2020" not filtered
+  ✅ FIX 4: added "cgpa" and "| cgpa" to _EDU_LINE_RE
+
+  ❌ BUG 5: Akarsh 0 experience — single-date internship with "Duration: 8 Weeks"
+            has no date range; neither pattern matched
+  ✅ FIX 5: Duration parser handles Weeks-only → capped at 0.5 yr total
+
+  ❌ BUG 6: Global intern cap — 2 × 6-month internships = 0.5 yr (wrong)
+  ✅ FIX 6: Per-stint 6-month cap; only cap TOTAL when NO professional jobs found
 """
 
 import re
@@ -52,63 +60,74 @@ class ParserService:
         "Diploma", "12th", "10th",
     ]
 
-    # Each entry is a list of lowercase substrings to scan for.
-    # Detection uses WORD-BOUNDARY regex to avoid false matches
-    # (e.g. "b.com" inside "github.com").
     DEGREE_KEYWORDS = {
-        "PhD":    ["ph.d", "phd", "doctor of philosophy", "doctorate"],
-        "M.Tech": ["m.tech", "master of technology", "m tech", "mtech"],
-        "M.Sc":   ["m.sc", "master of science", "msc"],
-        "MBA":    ["mba", "master of business administration", "master of business"],
-        "MCA":    ["mca", "master of computer application"],
-        "B.Tech": ["b.tech", "bachelor of technology", "b tech", "btech",
-                   "bachelor of engineering", "b.e."],
-        "B.Sc":   ["b.sc", "bachelor of science", "bsc"],
-        "BCA":    ["bca", "bachelor of computer application"],
-        "BBA":    ["bba", "bachelor of business administration"],
-        "B.Com":  ["b.com", "bachelor of commerce", "bcom"],
-        "B.A":    ["b.a.", "bachelor of arts", "b.des", "bachelor of design"],
-        "Diploma":["diploma"],
-        "12th":   ["12th", "higher secondary", "class xii", "intermediate", "senior secondary"],
-        "10th":   ["10th", "matriculation", "class x", "class 10", "secondary school"],
+        "PhD":     ["ph.d", "phd", "doctor of philosophy", "doctorate"],
+        "M.Tech":  ["m.tech", "master of technology", "m tech", "mtech",
+                    "m.s. in", "m.s in", "master of science in"],
+        "M.Sc":    ["m.sc", "master of science", "msc"],
+        "MBA":     ["mba", "master of business administration", "master of business"],
+        "MCA":     ["mca", "master of computer application"],
+        "B.Tech":  ["b.tech", "bachelor of technology", "b tech", "btech",
+                    "bachelor of engineering", "b.e.",
+                    "b.tech in"],
+        "B.Sc":    ["b.sc", "bachelor of science", "bsc", "b.sc."],
+        "BCA":     ["bca", "bachelor of computer application"],
+        "BBA":     ["bba", "bachelor of business administration"],
+        "B.Com":   ["b.com", "bachelor of commerce", "bcom"],
+        "B.A":     ["b.a.", "bachelor of arts", "b.des", "bachelor of design"],
+        "Diploma": ["diploma"],
+        "12th":    ["12th", "higher secondary", "class xii", "intermediate",
+                    "senior secondary", "hsc"],
+        "10th":    ["10th", "matriculation", "class x", "class 10",
+                    "secondary school", "ssc"],
     }
 
     # ─────────────────────────────────────────────────────────────────
     # SECTION HEADER PATTERNS
-    # Key fix: re.MULTILINE so ^ matches start of each line in full text
     # ─────────────────────────────────────────────────────────────────
 
-    # Marks START of a work section
     _WORK_HDR_RE = re.compile(
         r"^[ \t]*(?:(?:work\s+)?experience|professional\s+experience|"
         r"employment(?:\s+history)?|internships?|work\s+history|"
-        r"relevant\s+experience|career\s+summary)\s*:?\s*$",
+        r"relevant\s+experience|career\s+summary|work)\s*:?\s*$",
         re.IGNORECASE | re.MULTILINE,
     )
 
-    # Marks END of a work section (any non-work section header)
-    _STOP_HDR_RE = re.compile(
-        r"^[ \t]*(?:education|academic(?:\s+background)?|qualification|"
-        r"skills?|(?:(?:academic|personal|professional|key|notable)\s+)?projects?|"
-        r"certif(?:ications?)?(?:\s*&\s*accomplishments?)?|achievement|award|honor|"
-        r"interest|language|reference|publication|volunteer|"
-        r"position\s+of\s+responsibility|extracurricular|"
-        r"activities|summary|objective|profile|"
-        r"accomplishments?|hobbies|interests\s*&\s*hobbies)\s*:?\s*$",
+    # Full-line stop headers — must match the ENTIRE trimmed line
+    _STOP_HDR_FULL_RE = re.compile(
+        r"^[ \t]*(?:"
+        r"education|academic(?:\s+background)?|qualification|"
+        r"skills?|key\s+skills?|technical\s+skills?|"
+        r"(?:(?:academic|personal|professional|key|notable)\s+)?projects?|"
+        # certifications: handles "& Achievements" AND "& Accomplishments"
+        r"certif(?:ications?(?:\s+and\s+accomplishments?)?)?(?:\s*&\s*(?:achievements?|accomplishments?))?|"
+        r"achievement|award|honor|interest|language|reference|publication|volunteer|"
+        # positions of responsibility (template family)
+        r"positions?\s+of\s+responsibility|"
+        r"extracurricular|activities|summary|objective|profile|"
+        r"accomplishments?|hobbies|interests\s*&\s*hobbies"
+        r")\s*:?\s*$",
         re.IGNORECASE | re.MULTILINE,
     )
 
-    # Education context — lines with these keywords carry education dates
+    # Prefix-only stop — catches merged two-column headers
+    # e.g. "EDUCATION Master of Science Jun 2019" or "KEY SKILLS Selenium..."
+    _STOP_HDR_PREFIX_RE = re.compile(
+        r"^[ \t]*(?:education|key\s+skills?|technical\s+skills?|skills?)\b",
+        re.IGNORECASE,
+    )
+
+    # Education-context lines — dates on these lines are academic, not work
     _EDU_LINE_RE = re.compile(
-        r"(?:school|college|university|institute|academy|b\.?tech|m\.?tech|"
-        r"bachelor|master|diploma|secondary|cbse|ssc|hsc|polytechnic|"
-        r"b\.?sc|m\.?sc|mba|mca|bca|aptech|coursera|udemy|certification|"
-        r"cinematics|animation\s+school|maac|100\s+days|bootcamp|"
+        r"(?:cgpa|c\.g\.p\.a|gpa|school|college|university|institute|academy|"
+        r"b\.?tech|m\.?tech|bachelor|master|diploma|secondary|cbse|ssc|hsc|"
+        r"polytechnic|b\.?sc|m\.?sc|mba|mca|bca|aptech|coursera|udemy|"
+        r"certification|cinematics|animation\s+school|maac|100\s+days|bootcamp|"
         r"personal\s+project|professional\s+project|github\.com)",
         re.IGNORECASE,
     )
 
-    # Internship context — cap any single stint at 6 months
+    # Internship-context lines — cap each at 6 months
     _INTERN_LINE_RE = re.compile(
         r"\b(?:intern|trainee|apprentice|volunteer|social\s+intern|"
         r"instructor|coach|tutor|freelance)\b",
@@ -116,7 +135,26 @@ class ParserService:
     )
 
     # ─────────────────────────────────────────────────────────────────
-    # DATE RANGE PATTERNS
+    # DURATION FIELD PARSER  (v4 — Priority 1 for template family)
+    #
+    # Matches:
+    #   "Duration: 2 Years"
+    #   "Duration: 1 Year 9 Months"
+    #   "Duration: 6 Months"
+    #   "Duration: 8 Weeks"
+    # ─────────────────────────────────────────────────────────────────
+    _DURATION_RE = re.compile(
+        r"Duration:\s*"
+        r"(?:"
+        r"(?P<years>\d+)\s+Years?(?:\s+(?P<months_a>\d+)\s+Months?)?"   # Y yrs [M months]
+        r"|(?P<months_b>\d+)\s+Months?"                                   # M months only
+        r"|(?P<weeks>\d+)\s+Weeks?"                                       # N weeks only
+        r")",
+        re.IGNORECASE,
+    )
+
+    # ─────────────────────────────────────────────────────────────────
+    # DATE RANGE PATTERNS  (fallback when no Duration fields present)
     # ─────────────────────────────────────────────────────────────────
 
     # mm/yyyy – mm/yyyy  OR  mm/yyyy – Present
@@ -126,9 +164,8 @@ class ParserService:
         re.IGNORECASE,
     )
 
-    # Month YYYY – Month YYYY  (handles parentheses: "(June 2025 – Aug 2025 | Lucknow)")
+    # Month YYYY – Month YYYY  or  Month YYYY – Present
     _MON_YYYY_RE = re.compile(
-        r"[\(\s\n]?"
         r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})"
         r"\s*[-–—to]+\s*"
         r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?"
@@ -137,14 +174,13 @@ class ParserService:
         re.IGNORECASE,
     )
 
-    # Year-only: YYYY – YYYY  or  YYYY – Present
-    # Only match 4-digit years in range 1990–2030 to avoid false positives
+    # Year-only YYYY – YYYY (last-resort fallback)
     _YR_ONLY_RE = re.compile(
         r"(?<!\d)((?:19|20)\d{2})\s*[-–—]+\s*"
         r"((?:19|20)\d{2}|[Pp]resent|[Oo]ngoing|[Cc]urrent)(?!\d)",
     )
 
-    # Explicit "X years of experience"
+    # Explicit "X years of experience" — checked before everything else
     _EXP_STMT_RE = re.compile(
         r"(\d+(?:\.\d+)?)\s*\+?\s*(?:year|yr)s?\s*(?:of\s+)?(?:work\s+)?exp",
         re.IGNORECASE,
@@ -171,10 +207,11 @@ class ParserService:
         r"Statistics|Probability|EDA|Regression|Classification|"
         r"Communication|Problem[- ]Solving|Leadership|Teamwork|"
         r"Microsoft\s+Office|Jupyter|VS\s+Code|PostgreSQL|Firebase|"
-        r"SEO|SEM|Google\s+Ads|Google\s+Analytics|Content\s+(?:Strategy|Marketing)|"
-        r"Social\s+Media|Email\s+(?:Marketing|Campaigns)|"
+        r"SEO|SEM|Google\s+Ads|Google\s+Analytics|"
+        r"Content\s+(?:Strategy|Marketing)|Social\s+Media|"
+        r"Email\s+(?:Marketing|Campaigns)|"
         r"AutoCAD|SolidWorks|MATLAB|ANSYS|"
-        r"Unity|Unreal\s+Engine|C#|Figma|Adobe\s+XD|"
+        r"Unity|Unreal\s+Engine|Figma|Adobe\s+XD|"
         r"R\b|SPSS|SAS)\b",
         re.IGNORECASE,
     )
@@ -211,67 +248,56 @@ class ParserService:
         """
         Return professional experience in years (float, 0–25).
 
-        Algorithm:
-          1. Explicit mention ("3 years of experience")   → return immediately
-          2. Isolated work-section extraction              → parse date ranges
-          3. Fallback: scan whole text for date ranges     → filter by context
+        Priority order:
+          1. Explicit "X years of experience" in text (immediate return)
+          2. Duration fields in work section  ← KEY FIX for template family
+          3. Date range parsing               ← fallback for other formats
         """
-        # ── Layer 1: explicit statement ─────────────────────────────────
+        # ── Priority 1: explicit statement (e.g. "4 years of experience") ─
         for m in self._EXP_STMT_RE.finditer(text):
             val = float(m.group(1))
-            if val <= 30:
+            if 0 < val <= 30:
                 return round(val, 1)
 
-        # ── Layer 2: date ranges in isolated work section ───────────────
         work_text = self._extract_work_section(text)
-        return self._sum_date_ranges(work_text, full_text=text)
+
+        # ── Priority 2: Duration fields (template family explicit signal) ──
+        duration_years = self._sum_duration_fields(work_text)
+        if duration_years > 0:
+            return duration_years
+
+        # ── Priority 3: date range parsing (all other formats) ─────────────
+        return self._sum_date_ranges(work_text)
 
     def extract_highest_degree(self, text: str) -> str:
-        """
-        Return the highest academic degree found.
-        Uses regex with negative lookbehind/lookahead to prevent
-        false matches (e.g. 'b.com' inside 'github.com').
-        """
         text_lower = text.lower()
         for degree in self.DEGREE_RANK:
             for kw in self.DEGREE_KEYWORDS[degree]:
-                # Escape the keyword for regex use
                 escaped = re.escape(kw)
-                # Negative lookbehind: not preceded by a-z (word char)
-                # Negative lookahead:  not followed by a-z
                 pattern = r"(?<![a-z])" + escaped + r"(?![a-z])"
                 if re.search(pattern, text_lower):
                     return degree
         return "Unknown"
 
     def extract_skills_from_jd(self, jd_text: str) -> List[str]:
-        """
-        Extract clean skill tokens from a Job Description.
-
-        Pass 1 — known-tech keyword sweep (most reliable)
-        Pass 2 — short bullet items: ≤4 words, no verbs, no parens
-
-        Returns ≤25 clean, deduplicated skill strings.
-        """
+        """Extract clean skill tokens from a Job Description (≤25 results)."""
         skills: set = set()
 
-        # Pass 1 — known-tech keywords (normalise to Title Case)
+        # Pass 1 — known-tech keyword sweep
         for m in self._TECH_RE.finditer(jd_text):
             skill = re.sub(r"\s+", " ", m.group().strip())
-            # Preserve common UPPER acronyms; title-case everything else
             if skill.upper() == skill and len(skill) <= 5:
-                skills.add(skill)       # e.g. SQL, NLP, AWS, EDA
+                skills.add(skill)
             elif skill[0].isupper():
-                skills.add(skill)       # e.g. "Machine Learning", "Python"
+                skills.add(skill)
             else:
-                skills.add(skill.title())  # e.g. "statistics" → "Statistics"
+                skills.add(skill.title())
 
-        # Pass 2 — clean bullet-point phrases
+        # Pass 2 — short bullet items (≤4 words, no verbs, no parens)
         for line in jd_text.splitlines():
             raw = line.strip()
             raw = re.sub(r"^[\d\.\-\*\u2022\u25cf\u2013\u2014]+\s*", "", raw).strip()
             raw = raw.rstrip(".,;:()")
-
             if not raw or len(raw) > 50:
                 continue
             if raw.lower() in self._JD_SKIP:
@@ -280,49 +306,80 @@ class ParserService:
                 continue
             if re.search(r"[(){}[\]/\\]", raw):
                 continue
-
             words = raw.split()
             if not (1 <= len(words) <= 4):
                 continue
             if not (words[0][0].isupper() or words[0].isupper()):
                 continue
-
             skills.add(raw)
 
-        # Normalise casing: prefer Title Case; drop exact case-insensitive dups
-        normalised: dict = {}   # lower → display form
+        # Normalise casing
+        normalised: dict = {}
         for s in skills:
             key = s.lower()
-            # prefer the form that starts uppercase
             if key not in normalised or s[0].isupper():
                 normalised[key] = s
         skills = set(normalised.values())
 
-        # Drop noisy tail-words: phrases like "Data visualization skills",
-        # "Basic machine learning knowledge", "Problem-solving mindset"
-        # when a cleaner tech-keyword version already exists
-        _NOISY_TAIL = re.compile(
+        # Strip noisy suffix words
+        _NOISY = re.compile(
             r"\s+(?:skills?|knowledge|mindset|understanding|experience|"
             r"proficiency|fundamentals?|exposure|concepts?|tools?)\s*$",
             re.IGNORECASE,
         )
         cleaned: set = set()
         for s in skills:
-            stripped = _NOISY_TAIL.sub("", s).strip()
-            if stripped and stripped != s:
-                # only keep stripped version if it has ≥2 chars and looks like a skill
-                cleaned.add(stripped if len(stripped) > 1 else s)
-            else:
-                cleaned.add(s)
+            stripped = _NOISY.sub("", s).strip()
+            cleaned.add(stripped if stripped and len(stripped) > 1 else s)
         skills = cleaned
 
-        # Deduplicate: drop pure-substring items
         final = sorted(skills)
         deduped = [s for s in final
                    if not any(s.lower() in o.lower() and s.lower() != o.lower()
                                for o in final)]
-
         return deduped[:25]
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PRIVATE — Duration-field parser  (v4 addition)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _sum_duration_fields(self, work_text: str) -> float:
+        """
+        Parse all "Duration: ..." fields found in the work section and return
+        total professional experience in years.
+
+        Rules:
+          • "Duration: 2 Years"           → 24 months
+          • "Duration: 1 Year 9 Months"   → 21 months
+          • "Duration: 6 Months"          → 6 months
+          • "Duration: 8 Weeks"           → treated as short internship (1 month)
+            If ONLY weeks-based durations are found, cap total at 0.5 yr.
+        """
+        total_months = 0
+        weeks_only   = True       # stays True until we see a year/month duration
+
+        for m in self._DURATION_RE.finditer(work_text):
+            yrs  = int(m.group("years")    or 0)
+            mths = int(m.group("months_a") or m.group("months_b") or 0)
+            wks  = int(m.group("weeks")    or 0)
+
+            if wks and not yrs and not mths:
+                # weeks-only entry — count as 1 month max
+                total_months += 1
+            else:
+                weeks_only    = False
+                total_months += yrs * 12 + mths
+
+        if total_months == 0:
+            return 0.0
+
+        years = round(total_months / 12.0, 1)
+
+        # If we only found week-based internships, cap at 0.5 yr
+        if weeks_only:
+            years = min(years, 0.5)
+
+        return min(years, 25.0)
 
     # ═══════════════════════════════════════════════════════════════════════
     # PRIVATE — work section extraction
@@ -330,42 +387,37 @@ class ParserService:
 
     def _extract_work_section(self, text: str) -> str:
         """
-        Isolate lines that belong to the work/experience section.
+        Isolate lines belonging to the work/experience section using a
+        line-level state machine.
 
-        Strategy:
-          A) If a work-section header is found:
-             - Scan lines; collect everything between the work header
-               and the next stop-header.
-          B) If no work header exists (e.g. resume only has "Internship:" as
-             a sub-bullet, or no section labels at all):
-             - Collect ALL lines, excluding lines that are clearly
-               education-section content.
+        Handles:
+          A) Clean single-column resumes with explicit section headers
+          B) Two-column PDFs where "WORK" and "EXPERIENCE" are on separate lines
+          C) Merged-header lines like "EDUCATION Master of Science Jun 2019"
         """
         lines = text.splitlines()
-
-        # Detect whether resume has explicit work section header
         has_work_hdr = bool(self._WORK_HDR_RE.search(text))
 
         work_lines: List[str] = []
-        in_work   = False
-        in_stop   = False   # inside a non-work section
+        in_work = False
+        in_stop = False
 
         for line in lines:
             s = line.strip()
 
-            # Is this a work-section header?
             is_work_hdr = bool(self._WORK_HDR_RE.match(s + "\n"))
-
-            # Is this a stop-section header (edu / skills / projects / etc.)?
-            is_stop_hdr = bool(self._STOP_HDR_RE.match(s + "\n"))
+            is_stop_hdr = (
+                bool(self._STOP_HDR_FULL_RE.match(s + "\n"))
+                or bool(self._STOP_HDR_PREFIX_RE.match(s))
+            )
 
             if is_work_hdr:
                 in_work = True
                 in_stop = False
-                continue                 # don't include the header line itself
+                continue
 
             if is_stop_hdr and in_work:
-                in_work = False          # work section ended
+                in_work = False
                 in_stop = True
                 continue
 
@@ -373,105 +425,87 @@ class ParserService:
                 in_stop = True
                 continue
 
-            # Resume a new (work) section by unsetting in_stop if another
-            # work header appears — handled by the is_work_hdr branch above.
-
             if in_work:
                 work_lines.append(line)
-
             elif not has_work_hdr and not in_stop:
-                # Fallback: no explicit work header — include non-edu lines
+                # No explicit work header — include non-education content
                 if not self._EDU_LINE_RE.search(line):
                     work_lines.append(line)
 
         return "\n".join(work_lines) if work_lines else text
 
     # ═══════════════════════════════════════════════════════════════════════
-    # PRIVATE — date range summation
+    # PRIVATE — date range summation  (fallback for non-template resumes)
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _sum_date_ranges(self, work_text: str, full_text: str = "") -> float:
+    def _sum_date_ranges(self, work_text: str) -> float:
         """
-        Find all date ranges in work_text, deduplicate overlapping ones,
-        and return total professional experience in years.
+        Parse date ranges from work_text and return total years.
 
-        Rules:
-          - Education-context lines are skipped entirely.
-          - Internship-context stints are capped at 6 months each.
-          - If ALL stints found are internships, total is capped at 0.5 yr.
+        Per-stint rules:
+          - Education-context lines → skipped
+          - Internship-context stints → capped at 6 months each
+          - If NO professional stints found at all → cap total at 0.5 yr
         """
         today = date.today()
-        seen: set = set()        # dedup by (start_ym, end_ym) tuple
-        total_months = 0
-        is_all_intern = True
+        seen:  set = set()
+        total_months  = 0
+        has_prof_work = False   # True when ≥1 non-intern stint found
 
         def process(y1: int, m1: int, y2: int, m2: int, ctx: str) -> None:
-            nonlocal total_months, is_all_intern
-
+            nonlocal total_months, has_prof_work
             key = (y1 * 12 + m1, y2 * 12 + m2)
             if key in seen:
                 return
             seen.add(key)
-
-            # Skip if context suggests this is an education date range
             if self._EDU_LINE_RE.search(ctx):
                 return
-
             dur = max(0, (y2 - y1) * 12 + (m2 - m1))
-            is_intern = bool(self._INTERN_LINE_RE.search(ctx))
-
-            if is_intern:
-                dur = min(dur, 6)            # cap single internship
+            if bool(self._INTERN_LINE_RE.search(ctx)):
+                dur = min(dur, 6)          # per-stint internship cap
             else:
-                is_all_intern = False
-
+                has_prof_work = True
             total_months += dur
 
-        # ── Pattern 1: mm/yyyy ────────────────────────────────────────────
+        # Pattern 1: mm/yyyy
         for m in self._MM_YYYY_RE.finditer(work_text):
             y1, m1 = int(m.group(2)), int(m.group(1))
             ctx = work_text[max(0, m.start() - 300): m.end() + 150]
-            if m.group(5):   # Present / Ongoing
-                y2, m2 = today.year, today.month
-            else:
-                y2, m2 = int(m.group(4)), int(m.group(3))
+            y2, m2 = (today.year, today.month) if m.group(5) \
+                     else (int(m.group(4)), int(m.group(3)))
             process(y1, m1, y2, m2, ctx)
 
-        # ── Pattern 2: Month YYYY ─────────────────────────────────────────
+        # Pattern 2: Month YYYY
         for m in self._MON_YYYY_RE.finditer(work_text):
-            m1_name = m.group(1).lower()[:3]
-            y1 = int(m.group(2))
-            end_str = m.group(4)
-            m1 = self._MONTHS.get(m1_name, 6)
+            m1n = m.group(1).lower()[:3]
+            y1  = int(m.group(2))
+            end = m.group(4)
+            m1  = self._MONTHS.get(m1n, 6)
             ctx = work_text[max(0, m.start() - 300): m.end() + 150]
-
-            if end_str.lower() in ("present", "ongoing", "current"):
+            if end.lower() in ("present", "ongoing", "current"):
                 y2, m2 = today.year, today.month
             else:
-                y2 = int(end_str)
-                m2_name = (m.group(3) or "").lower()[:3]
-                m2 = self._MONTHS.get(m2_name, 6) if m2_name else m1
-
+                y2   = int(end)
+                m2n  = (m.group(3) or "").lower()[:3]
+                m2   = self._MONTHS.get(m2n, 6) if m2n else m1
             process(y1, m1, y2, m2, ctx)
 
-        # ── Pattern 3: Year-only YYYY – YYYY (e.g. "2023 – 2024") ────────
-        # Only applied if patterns 1 & 2 found nothing (avoids double-counting)
+        # Pattern 3: Year-only YYYY–YYYY (last resort, only if nothing found yet)
         if not seen:
             for m in self._YR_ONLY_RE.finditer(work_text):
-                y1 = int(m.group(1))
-                end_str = m.group(2)
+                y1  = int(m.group(1))
+                end = m.group(2)
                 ctx = work_text[max(0, m.start() - 300): m.end() + 150]
-                if end_str.lower() in ("present", "ongoing", "current"):
+                if end.lower() in ("present", "ongoing", "current"):
                     y2, m2 = today.year, today.month
                 else:
-                    y2 = int(end_str)
-                    m2 = 6    # assume mid-year when month unknown
-                process(y1, 6, y2, m2, ctx)   # assume mid-year start
+                    y2, m2 = int(end), 6
+                process(y1, 6, y2, m2, ctx)
 
         years = round(total_months / 12.0, 1)
 
-        # If every stint was an internship, cap total at 0.5 yr
-        if is_all_intern and years > 0:
+        # Cap at 0.5 yr only when EVERY detected stint was an internship
+        if not has_prof_work and years > 0:
             years = min(years, 0.5)
 
         return min(years, 25.0)
@@ -493,22 +527,39 @@ class ParserService:
 
     def _find_name(self, text: str) -> str:
         """
-        Multi-strategy name extractor:
-          1. Explicit 'Name: Firstname Lastname' label (common in template resumes)
-          2. First non-empty line heuristic: 2-4 all-alpha words, not a title/header
+        Strategy 1: Explicit 'Name: Firstname Lastname' label.
+        Strategy 2: Template family — Line 0 is always the name if Line 1
+                    contains a pipe-separated contact string with email.
+        Strategy 3: Heuristic scan of first 12 non-empty lines.
         """
-        # Strategy 1: explicit "Name:" label
-        name_label = re.search(
-            r"(?:^|\n)\s*[Nn]ame\s*[:\-]\s*([A-Za-z][A-Za-z .'\-]{2,40})",
+        # Strategy 1: explicit label
+        m = re.search(
+            r"(?:^|\n)\s*[Nn]ame\s*[:\-]\s*([A-Za-z][A-Za-z .'\\-]{2,40})",
             text,
         )
-        if name_label:
-            candidate = name_label.group(1).strip()
+        if m:
+            candidate = m.group(1).strip()
             words = candidate.split()
             if 2 <= len(words) <= 5:
                 return candidate.title()
 
-        # Strategy 2: heuristic scan of first 12 lines
+        # Strategy 2: template family fingerprint
+        # Line 0 = name, Line 1 = "x@y.com | +91..." with pipe separator
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        if len(lines) >= 2:
+            line0, line1 = lines[0], lines[1]
+            has_pipe    = "|" in line1
+            has_email   = bool(self._EMAIL_RE.search(line1))
+            words0      = line0.split()
+            is_name_like = (
+                2 <= len(words0) <= 4
+                and all(re.match(r"^[A-Za-z.'\\-]+$", w) for w in words0)
+                and "@" not in line0
+            )
+            if has_pipe and has_email and is_name_like:
+                return line0.title()
+
+        # Strategy 3: heuristic scan
         IGNORE = frozenset({
             "resume", "curriculum vitae", "cv", "profile", "summary",
             "objective", "contact", "address", "experience", "education",
@@ -520,15 +571,15 @@ class ParserService:
             "software", "senior", "junior", "lead", "data", "full", "stack",
             "front", "back", "end", "mobile", "web", "cloud", "ai", "ml",
             "ui", "ux", "digital", "marketing", "mechanical",
+            "qa", "automation", "quality",
         })
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
         for line in lines[:12]:
             low = line.lower()
             if any(w in low for w in IGNORE):
                 continue
             words = line.split()
             if 2 <= len(words) <= 4:
-                if all(re.match(r"^[A-Za-z.'\-]+$", w) for w in words):
+                if all(re.match(r"^[A-Za-z.'\\-]+$", w) for w in words):
                     if "@" not in line and not re.search(r"\d{4}", line):
                         if not any(w.lower() in TITLE_WORDS for w in words):
                             return line.title()
